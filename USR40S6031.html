@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<title><c:out value="${sessionVO.programName}" /></title>
+		<link rel="stylesheet" href="/BT-EMS/dist/css/monitor.css" type="text/css" />
+		<style>
+			body {
+				background-color: #4B4B4B;
+				padding : 0;
+				margin : 0; 
+				overflow: hidden;
+				font-family: fantasy;
+			}
+			div {
+				/* border : 0.1px solid black; */
+				margin : 1px;
+			}
+			.bottom-div-title {
+				background-color: #0B3041;
+				color: white;
+				height:20%;
+				align-content: center; 
+				text-align: center;
+				font-size: 30px;
+			}
+			.bottom-div-content {
+				background-color: white;
+				height:80%;
+				font-size: 100px;
+				align-content: center; 
+				text-align: center;
+			}
+			.div-chat .bottom-div-title{
+				background-color: #C04F15;
+			}
+		</style>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.min.js"></script>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.easyui.min.sup.js"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/i18n/swat.i18n.ko.js"/>?v=${rand}"></script>
+		
+		<script type="text/javascript" src="/BT-EMS/scripts/alasql.min.js"></script>
+		
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4Custom.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/tools.js"/>?v=${rand}"></script>
+		<script type="text/javaScript" defer="defer">
+			var monitoringInitData;
+			var ipronMonitoringData;
+		
+			$(document).ready(function () {
+				updateTime();
+				
+				const $btn = $('#fullscreenBtn');
+				
+				$btn.fadeIn(1000);
+				
+				$btn.on('click', function () {
+					const el = document.documentElement;
+					
+					if(el.requestFullscreen) {
+						el.requestFullscreen();
+					}
+					
+					$btn.fadeOut(300);
+				});
+				
+				function onFullscreenChange() {
+					const isFullscreen = document.fullscreenElement;
+					
+					if(!isFullscreen) {
+						$btn.fadeIn(500);
+					}
+				}
+				
+				document.addEventListener('fullscreenchange', onFullscreenChange);
+				
+				setInitData();
+				startGetData();
+			});
+			
+			function updateTime() {
+				const now = new Date();
+				const formattedTime = String(now.getFullYear()).padStart(2, '0') + '. '
+									+ String(now.getMonth() + 1).padStart(2, '0') + '. '
+									+ String(now.getDate()).padStart(2, '0');
+				
+				$('#top-div-date').text(formattedTime);
+			}
+			function startGetData() {
+				MonitoringSchedulerV3
+				.add("USR40S6031-IPRON", {"callback": setIpronMonitoringData, "interval": 5000})
+				.start()
+				.enableAutoRecovery();
+			}
+			
+			function setIpronMonitoringData ($def) {
+				var sUrl = "<c:url value='/usr/board/USR40S6010/ipronData.do'/>"
+				Swat.process(sUrl, monitoringInitData, { "callback":function(result) {
+					ipronMonitoringData = JSON.parse(result.rows);
+					console.log('ipron monitoring data');
+					console.table(ipronMonitoringData);
+					
+					setTextVoiceCtiQ();
+					setTextChatCtiQ();
+					setTextVoiceAgentGroup();
+					setTextChatAgentGroup();
+					
+					
+					$def.resolve();
+				}});
+			}
+			
+			function setInitData() {
+				var sUrl = "<c:url value='/usr/board/USR40S6010/initData.do'/>"
+				Swat.process(sUrl, null, { "callback":function(result) {
+					monitoringInitData = JSON.parse(result.rows);
+					console.log('monitoring init data');
+					console.table(monitoringInitData);
+				}});
+			}
+			
+			function setTextVoiceCtiQ() {
+				var insuranceVoiceCtiQList = ipronMonitoringData.insuranceVoiceCtiQList;
+				var allInsuranceCtiQRedisData = insuranceVoiceCtiQList.allInsuranceCtiQRedisData;
+				
+				var strSql = " \
+					SELECT\
+						SUM_CONN_CNT,\
+						SUM_ANSWER_CNT,\
+						RTS_WAIT_CNT,\
+						ROUND((SUM_ANSWER_CNT/IFNULL(SUM_CONN_CNT,1)) * 100) ANSWER_RATE\
+					FROM ( \
+	   					SELECT \
+							SUM(A.SUM_CONN_CNT) SUM_CONN_CNT,\
+							SUM(A.SUM_ANSWER_CNT) SUM_ANSWER_CNT,\
+							SUM(A.RTS_WAIT_CNT) RTS_WAIT_CNT\
+						FROM ? A \
+					) \
+				";
+				
+				var allInsuranceVoiceCtiQAlaResult = alasql(strSql,[allInsuranceCtiQRedisData]);
+				
+				console.table(allInsuranceVoiceCtiQAlaResult);
+				
+				$('#insuranceCtiQVoiceSumRtsWaitCnt').text(allInsuranceVoiceCtiQAlaResult[0].RTS_WAIT_CNT);
+				$('#insuranceCtiQVoiceSumConnCnt').text(allInsuranceVoiceCtiQAlaResult[0].SUM_CONN_CNT);
+				$('#insuranceCtiQVoiceSumAnswerCnt').text(allInsuranceVoiceCtiQAlaResult[0].SUM_ANSWER_CNT);
+				$('#insuranceCtiQVoiceSumAnswerRate').text(allInsuranceVoiceCtiQAlaResult[0].ANSWER_RATE);
+			}
+			
+			function setTextChatCtiQ() {
+				var insuranceChatCtiQList = ipronMonitoringData.insuranceChatCtiQList;
+				var allInsuranceCtiQRedisData = insuranceChatCtiQList.allInsuranceChatCtiQRedisData;
+				
+				var strSql = " \
+					SELECT\
+						SUM_CONN_CNT,\
+						SUM_ANSWER_CNT,\
+						RTS_WAIT_CNT,\
+						ROUND((SUM_ANSWER_CNT/IFNULL(SUM_CONN_CNT,1)) * 100) ANSWER_RATE\
+					FROM ( \
+	   					SELECT \
+							SUM(A.SUM_CONN_CNT) SUM_CONN_CNT,\
+							SUM(A.SUM_ANSWER_CNT) SUM_ANSWER_CNT,\
+							SUM(A.RTS_WAIT_CNT) RTS_WAIT_CNT\
+						FROM ? A \
+					) \
+				";
+				
+				var insuranceAlaSqlResults = alasql(strSql, [allInsuranceCtiQRedisData])[0];
+				
+				console.table(insuranceAlaSqlResults);
+				
+				$('#insuranceCtiQChatSumRtsWaitCnt').text(insuranceAlaSqlResults.RTS_WAIT_CNT);
+				$('#insuranceCtiQChatSumConnCnt').text(insuranceAlaSqlResults.SUM_CONN_CNT);
+				$('#insuranceCtiQChatSumAnswerCnt').text(insuranceAlaSqlResults.SUM_ANSWER_CNT);
+				$('#insuranceCtiQChatSumAnswerRate').text(insuranceAlaSqlResults.ANSWER_RATE);
+				
+			}
+			
+			function setTextVoiceAgentGroup () {
+				var insuranceVoiceAgentGroupList = ipronMonitoringData.insuranceVoiceAgentGroupList;
+				var allInsuranceVoiceAgentGroupRedisData = insuranceVoiceAgentGroupList.allInsuranceVoiceAgentGroupRedisData;
+				
+				var strSql = " \
+	   				SELECT \
+						SUM(A.RTS_LOGIN) RTS_LOGIN,\
+						SUM(A.RTS_LOOUT) RTS_LOGOUT,\
+						SUM(A.RTS_READY) RTS_READY,\
+						SUM(A.RTS_IB_BUSY + A.RTS_OB_BUSY + RTS_OB_DIALING + RTS_IB_RINGING) RTS_BUSY,\
+						SUM(A.RTS_NOTREADY) RTS_NOTREADY,\
+						SUM(A.RTS_ACW) RTS_ACW\
+					FROM ? A \
+				";
+				
+				var allInsuranceVoiceAgentGroupAlaResult = alasql(strSql,[allInsuranceVoiceAgentGroupRedisData]);
+				console.table(allInsuranceVoiceAgentGroupAlaResult);
+				
+				$('#insuranceAgentGroupVoiceLogin').text(allInsuranceVoiceAgentGroupAlaResult[0].RTS_LOGIN);
+				$('#insuranceAgentGroupVoiceLogout').text(allInsuranceVoiceAgentGroupAlaResult[0].RTS_LOGOUT);
+				$('#insuranceAgentGroupVoiceReady').text(allInsuranceVoiceAgentGroupAlaResult[0].RTS_READY);
+				$('#insuranceAgentGroupVoiceBusy').text(allInsuranceVoiceAgentGroupAlaResult[0].RTS_BUSY);
+				$('#insuranceAgentGroupVoiceAcw').text(allInsuranceVoiceAgentGroupAlaResult[0].RTS_ACW);
+				$('#insuranceAgentGroupVoiceNotReady').text(allInsuranceVoiceAgentGroupAlaResult[0].RTS_NOTREADY);
+			}
+			
+			function setTextChatAgentGroup () {
+				var insuranceChatAgentGroupList = ipronMonitoringData.insuranceChatAgentGroupList;
+				var allInsuranceChatAgentGroupRedisData = insuranceChatAgentGroupList.allInsuranceChatAgentGroupRedisData;
+				
+				var strSql = " \
+	   				SELECT \
+						SUM(A.RTS_READY) RTS_READY,\
+						SUM(A.RTS_IB_BUSY + A.RTS_OB_BUSY + RTS_OB_DIALING + RTS_IB_RINGING) RTS_BUSY,\
+						SUM(A.RTS_NOTREADY) RTS_NOTREADY,\
+						SUM(A.RTS_ACW) RTS_ACW\
+					FROM ? A \
+				";
+				
+				var allInsuranceChatAgentGroupAlaResult = alasql(strSql,[allInsuranceChatAgentGroupRedisData]);
+				console.table(allInsuranceChatAgentGroupAlaResult);
+				
+				$('#insuranceAgentGroupChatReady').text(allInsuranceChatAgentGroupAlaResult[0].RTS_READY);
+				$('#insuranceAgentGroupChatBusy').text(allInsuranceChatAgentGroupAlaResult[0].RTS_BUSY);
+				$('#insuranceAgentGroupChatNotReady').text(allInsuranceChatAgentGroupAlaResult[0].RTS_NOTREADY);
+				$('#insuranceAgentGroupChatAcw').text(allInsuranceChatAgentGroupAlaResult[0].RTS_ACW);
+			}
+		</script>
+	</head>
+	
+	<body>
+		<!-- <button id="fullscreenBtn">전체 화면</button> -->
+		<div class="top-div" style="display:flex; width:100%; height:15%;">
+			<div id="top-div-title" style="width:80%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 65px; border-radius:10px; ">한국교직원공제회 컨택센터 상담사 현황(보험 센터)</div>
+			<div id="top-div-date" style="width:20%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 60px; border-radius:10px;"></div>
+		</div>
+		<div class="bottom-div" style="display:flex; width:100%; height:82%;">
+			<div class="bottom-div-1" style="width:15%; display:flex;">
+				<div style="height:100%; width:50%;">
+					<div class="bottom-div-title">로그인</div>
+					<div class="bottom-div-content">
+						<span id="insuranceAgentGroupVoiceLogin">0</span>명
+					</div>
+				</div>
+				<div style="height:100%; width:50%;">
+					<div class="bottom-div-title">로그아웃</div>
+					<div class="bottom-div-content">
+						<span id="insuranceAgentGroupVoiceLogout">0</span>명
+					</div>
+				</div>
+			</div>
+			<div class="bottom-div-0" style="width:10%;">
+				<div class="bottom-title" style="width:100%;height:50%;background-color:#0B3041;align-content: center; text-align: center;font-size:120px;color:white;">음성</div>
+				<div class="bottom-title" style="width:100%;height:50%;background-color:#C04F15;align-content: center; text-align: center;font-size:120px;color:white;">채팅</div>
+			</div>
+			<div style="width:75%;">
+				<div style="height:50%; width:100%;">
+					<div style="height:50%; display:flex;">
+						<div style="width:20%;">
+							<div class="bottom-div-title">고객 대기</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQVoiceSumRtsWaitCnt">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">상담사 대기</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupVoiceReady">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">상담중</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupVoiceBusy">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">후처리</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupVoiceAcw">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">이석</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupVoiceNotReady">0</span>명
+							</div>
+						</div>
+					</div>
+					<div style="height:50%; display:flex;">
+						<div style="width:33%;">
+							<div class="bottom-div-title">응대율</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQVoiceSumAnswerRate">0</span>%
+							</div>
+						</div>
+						<div style="width:33%;">
+							<div class="bottom-div-title">인입콜</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQVoiceSumConnCnt">0</span>건
+							</div>
+						</div>
+						<div style="width:33%;">
+							<div class="bottom-div-title">응대콜</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQVoiceSumAnswerCnt">0</span>건
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="div-chat" style="height:50%; width:100%;">
+					<div style="height:50%; display:flex;">
+						<div style="width:20%;">
+							<div class="bottom-div-title">고객 대기</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQChatSumRtsWaitCnt">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">상담사 대기</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupChatReady">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">상담중</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupChatBusy">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">후처리</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupChatAcw">0</span>명
+							</div>
+						</div>
+						<div style="width:20%;">
+							<div class="bottom-div-title">이석</div>
+							<div class="bottom-div-content">
+								<span id="insuranceAgentGroupChatNotReady">0</span>명
+							</div>
+						</div>
+					</div>
+					<div style="height:50%; display:flex;">
+						<div style="width:33%;">
+							<div class="bottom-div-title">응대율</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQChatSumAnswerRate">0</span>%
+							</div>
+						</div>
+						<div style="width:33%;">
+							<div class="bottom-div-title">인입콜</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQChatSumConnCnt">0</span>건
+							</div>
+						</div>
+						<div style="width:33%;">
+							<div class="bottom-div-title">응대콜</div>
+							<div class="bottom-div-content">
+								<span id="insuranceCtiQChatSumAnswerCnt">0</span>건
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
