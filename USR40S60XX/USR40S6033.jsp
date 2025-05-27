@@ -1,0 +1,167 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ include file="/WEB-INF/jsp/include/registTaglib.jsp"%>
+<jsp:include page="/WEB-INF/jsp/include/registChart.jsp" flush="true" />
+<html>
+	<head>
+		<title><c:out value="${sessionVO.programName}" /></title>
+		<link rel="stylesheet" href="/BT-EMS/dist/css/monitor.css" type="text/css" />
+		<style>
+			body {
+				background-color: #4B4B4B;
+				padding : 0;
+				margin : 0; 
+				overflow: hidden;
+				font-family: fantasy;
+			}
+			div {
+				/*border : 0.1px solid black;*/
+				margin : 1px;
+			}
+			.bottom-div-title {
+				background-color: #0B3041;
+				color: white;
+				width:100%;
+				height:10%;
+				align-content: center; 
+				padding-left: 30px;
+				font-size: 65px;
+			}
+			.bottom-div-content {
+				background-color: white;
+				height:90%;
+			}
+			.bottom-div-content table {
+				width:100%;
+				height:100%;
+				align-content: center;
+				text-align: center;
+			}
+			.bottom-div-content thead {
+				background-color : black;
+				color : white;
+				font-size : 30px;
+			}
+			.bottom-div-content tbody {
+				font-size : 40px;
+				
+			}
+			.bottom-div-content tbody tr:nth-child(odd) {
+				background-color : #CBCBCB;
+			}
+			.bottom-div-content tbody tr:nth-child(even) {
+				background-color : #E7E7E7;
+			}
+			.bottom-div-content tbody td {
+				width: 25%;
+			}
+		</style>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.min.js"></script>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.easyui.min.sup.js"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/i18n/swat.i18n.ko.js"/>?v=${rand}"></script>
+		
+		<script type="text/javascript" src="/BT-EMS/scripts/alasql.min.js"></script>
+		
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4Custom.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/tools.js"/>?v=${rand}"></script>
+		<script type="text/javaScript" defer="defer">
+			var monitoringInitData;
+		
+			$(document).ready(function () {
+				generateAgentTr();
+				
+				updateTime();
+				
+				setInitData();
+				startGetData();
+			});
+			
+			function generateAgentTr() {
+				const tableBody = document.querySelector('#cnsltRankBody');
+				
+				for (let i =1 ; i <= 5; i ++) {
+					const tr = document.createElement('tr');
+					
+					const nameTd = document.createElement("td");
+					nameTd.id = 'cnsltBigRank' + i;
+					tr.appendChild(nameTd);
+					
+					const answerCntTd = document.createElement("td");
+					answerCntTd.id = 'cnsltMidRank' + i;
+					tr.appendChild(answerCntTd);
+					
+					const talkTimeTd = document.createElement("td");
+					talkTimeTd.id = 'cnsltSmallRank' + i;
+					tr.appendChild(talkTimeTd);
+					
+					const acwTimeTd = document.createElement("td");
+					acwTimeTd.id = 'cnsltCount' + i;
+					tr.appendChild(acwTimeTd);
+					
+					tableBody.appendChild(tr);
+				}
+			}
+			
+			function updateTime() {
+				const now = new Date();
+				const formattedTime = String(now.getFullYear()).padStart(2, '0') + '. '
+									+ String(now.getMonth() + 1).padStart(2, '0') + '. '
+									+ String(now.getDate()).padStart(2, '0');
+				
+				$('#top-div-date').text(formattedTime);
+			}
+			
+			function startGetData() {
+				MonitoringSchedulerV3
+				.add("USR40S6033-3RDPTY", {"callback": set3rdPtyMonitoringData, "interval": 60000})
+				.start()
+				.enableAutoRecovery();
+			}
+			
+			function setInitData() {
+				var sUrl = "<c:url value='/usr/board/USR40S6030/initData.do'/>"
+				Swat.process(sUrl, null, { "callback":function(result) {
+					monitoringInitData = JSON.parse(result.rows);
+					console.log('monitoring init data');
+					console.table(monitoringInitData);
+				}});
+			}
+			
+			function set3rdPtyMonitoringData ($def) {
+				var sUrl = "<c:url value='/usr/board/USR40S6030/get3rdPtyData.do'/>"
+				Swat.process(sUrl, null, { "callback":function(result) {
+					trdPtyMonitoringData = JSON.parse(result.rows);
+					console.log('3rd party monitoring data');
+					console.table(trdPtyMonitoringData);
+					
+					//TODO::회원 상담 유형 요소에 세팅
+					
+					$def.resolve();
+				}});
+			}
+		</script>
+	</head>
+	
+	<body>
+		<div class="top-div" style="display:flex; width:100%; height:15%;">
+			<div id="top-div-title" style="width:80%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 70px; border-radius:10px; ">보험 CS 컨택센터 현황</div>
+			<div id="top-div-date" style="width:20%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 60px; border-radius:10px;"></div>
+		</div>
+		<div class="bottom-div" style="width:100%; height:85%;">
+			<div class="bottom-div-title">실시간 상담유형 TOP5</div>
+			<div class="bottom-div-content">
+				<table>
+					<thead>
+						<tr>
+							<td>상담유형(대)</td>
+							<td>상담유형(중)</td>
+							<td>상담유형(소)</td>
+							<td>건수</td>
+						</tr>
+					</thead>
+					<tbody id="cnsltRankBody"></tbody>
+				</table>
+			</div>
+		</div>
+	</body>
+</html>

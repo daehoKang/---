@@ -1,0 +1,338 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ include file="/WEB-INF/jsp/include/registTaglib.jsp"%>
+<html>
+	<head>
+		<title><c:out value="${sessionVO.programName}" /></title>
+		<link rel="stylesheet" href="/BT-EMS/dist/css/monitor.css" type="text/css" />
+		<style>
+			body {
+				background-color: #4B4B4B;
+				padding : 0;
+				margin : 0; 
+				overflow: hidden;
+				font-family: fantasy;
+			}
+			div {
+				/* border : 0.1px solid black; */
+				margin : 5px;
+			}
+			.bottom-div-title {
+				background-color: #0B3041;
+				color: white;
+				width:100%;
+				height:10%;
+				align-content: center; 
+				padding-left: 30px;
+				font-size: 65px;
+			}
+			.bottom-div-content {
+				background-color: white;
+			}
+			.bottom-div-content table {
+				width:100%;
+				height:100%;
+				align-content: center;
+				text-align: center;
+			}
+			.bottom-div-content thead {
+				background-color : black;
+				color : white;
+				font-size : 30px;
+			}
+			.bottom-div-content tbody {
+				font-size : 40px;
+				
+			}
+			.bottom-div-content tbody tr {
+				background-color : #CBCBCB;
+			}
+			.bottom-div-content-right tbody{
+				font-size : 60px;
+			}
+			
+		</style>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.min.js"></script>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.easyui.min.sup.js"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/i18n/swat.i18n.ko.js"/>?v=${rand}"></script>
+		
+		<script type="text/javascript" src="/BT-EMS/scripts/alasql.min.js"></script>
+		
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4Custom.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/tools.js"/>?v=${rand}"></script>
+		<script type="text/javaScript" defer="defer">
+			var monitoringInitData;
+			var ipronMonitoringData;
+		
+			$(document).ready(function () {
+				updateTime();
+				
+				setInitData();
+				startGetData();
+			});
+			
+			function updateTime() {
+				const now = new Date();
+				const formattedTime = String(now.getFullYear()).padStart(2, '0') + '. '
+									+ String(now.getMonth() + 1).padStart(2, '0') + '. '
+									+ String(now.getDate()).padStart(2, '0');
+				
+				$('#top-div-date').text(formattedTime);
+			}
+			function startGetData() {
+				MonitoringSchedulerV3
+				.add("USR40S6021-IPRON", {"callback": setIpronMonitoringData, "interval": 5000})
+				.start()
+				.enableAutoRecovery();
+			}
+			
+			function setIpronMonitoringData ($def) {
+				var sUrl = "<c:url value='/usr/board/USR40S6020/ipronData.do'/>"
+				Swat.process(sUrl, monitoringInitData, { "callback":function(result) {
+					ipronMonitoringData = JSON.parse(result.rows);
+					console.log('ipron monitoring data');
+					console.table(ipronMonitoringData);
+					
+					setTextVoiceCtiQAndGroup();
+					
+					setTextChatCtiQAndGroup();
+					
+					$def.resolve();
+				}});
+			}
+			
+			function setInitData() {
+				var sUrl = "<c:url value='/usr/board/USR40S6020/initData.do'/>"
+				Swat.process(sUrl, null, { "callback":function(result) {
+					monitoringInitData = JSON.parse(result.rows);
+					console.log('monitoring init data');
+					console.table(monitoringInitData);
+				}});
+			}
+			
+			function setTextVoiceCtiQAndGroup() {
+				var personalCtiQList = ipronMonitoringData.personalVoiceCtiQList;
+				var allPersonalCtiQRedisData = personalCtiQList.allPersonalCtiQRedisData;
+				var personalVoiceCtiQRedisData = personalCtiQList.personalVoiceCtiQRedisData;
+				var companyVoiceCtiQRedisData = personalCtiQList.companyVoiceCtiQRedisData;
+				var moneyVoiceCtiQRedisData = personalCtiQList.moneyVoiceCtiQRedisData;
+
+				var personalVoiceAgentGroupList = ipronMonitoringData.personalVoiceAgentGroupList;
+				var allPersonalVoiceAgentGroupRedisData = personalVoiceAgentGroupList.allPersonalVoiceAgentGroupRedisData;
+				
+				var strSql = " \
+					SELECT\
+						SUM_CONN_CNT,\
+						SUM_ANSWER_CNT,\
+						ROUND((SUM_ANSWER_CNT/IFNULL(SUM_CONN_CNT,1)) * 100) ANSWER_RATE\
+					FROM ( \
+	   					SELECT \
+							SUM(A.SUM_CONN_CNT) SUM_CONN_CNT,\
+							SUM(A.SUM_ANSWER_CNT) SUM_ANSWER_CNT\
+						FROM ? A \
+					) \
+				";
+				
+				var strSql2 = " \
+	   				SELECT \
+						SUM(A.TOT_AGENT_CNT) TOT_AGENT_CNT,\
+						SUM(A.RTS_READY) RTS_READY,\
+						SUM(A.RTS_IB_BUSY + A.RTS_OB_BUSY + RTS_OB_DIALING + RTS_IB_RINGING) RTS_BUSY,\
+						SUM(A.RTS_NOTREADY) RTS_NOTREADY,\
+						SUM(A.RTS_ACW) RTS_ACW\
+					FROM ? A \
+				";
+				
+				var allPersonalAlaSqlResults = alasql(strSql, [allPersonalCtiQRedisData])[0];
+				var personalAlaSqlResults = alasql(strSql, [personalVoiceCtiQRedisData])[0];
+				var companyAlaSqlResults = alasql(strSql, [companyVoiceCtiQRedisData])[0];
+				var moneyAlaSqlResults = alasql(strSql, [moneyVoiceCtiQRedisData])[0];
+				
+				var allPersonalVoiceAgentGroupAlaResult = alasql(strSql2,[allPersonalVoiceAgentGroupRedisData]);
+				
+				console.table(allPersonalAlaSqlResults);
+				console.table(personalAlaSqlResults);
+				console.table(companyAlaSqlResults);
+				console.table(moneyAlaSqlResults);
+				
+				console.table(allPersonalVoiceAgentGroupAlaResult);
+				
+				$('#allPersonalCtiQVoiceSumConnCnt').text(allPersonalAlaSqlResults.SUM_CONN_CNT);
+				$('#allPersonalCtiQVoiceSumAnswerCnt').text(allPersonalAlaSqlResults.SUM_ANSWER_CNT);
+				$('#allPersonalCtiQVoiceSumAnswerRate').text(allPersonalAlaSqlResults.ANSWER_RATE);
+				
+				$('#personalCtiQVoiceSumConnCnt').text(personalAlaSqlResults.SUM_CONN_CNT);
+				$('#personalCtiQVoiceSumAnswerCnt').text(personalAlaSqlResults.SUM_ANSWER_CNT);
+				$('#personalCtiQVoiceSumAnswerRate').text(personalAlaSqlResults.ANSWER_RATE);
+				
+				$('#companyCtiQVoiceSumConnCnt').text(companyAlaSqlResults.SUM_CONN_CNT);
+				$('#companyCtiQVoiceSumAnswerCnt').text(companyAlaSqlResults.SUM_ANSWER_CNT);
+				$('#companyCtiQVoiceSumAnswerRate').text(companyAlaSqlResults.ANSWER_RATE);
+				
+				$('#moneyCtiQVoiceSumConnCnt').text(moneyAlaSqlResults.SUM_CONN_CNT);
+				$('#moneyCtiQVoiceSumAnswerCnt').text(moneyAlaSqlResults.SUM_ANSWER_CNT);
+				$('#moneyCtiQVoiceSumAnswerRate').text(moneyAlaSqlResults.ANSWER_RATE);
+				
+				$('#personalAgentGroupVoiceTotAgentCnt').text(allPersonalVoiceAgentGroupAlaResult[0].TOT_AGENT_CNT);
+				$('#personalAgentGroupVoiceReady').text(allPersonalVoiceAgentGroupAlaResult[0].RTS_READY);
+				$('#personalAgentGroupVoiceBusy').text(allPersonalVoiceAgentGroupAlaResult[0].RTS_BUSY);
+				$('#personalAgentGroupVoiceNotReady').text(allPersonalVoiceAgentGroupAlaResult[0].RTS_NOTREADY);
+				$('#personalAgentGroupVoiceAcw').text(allPersonalVoiceAgentGroupAlaResult[0].RTS_ACW);
+			}
+			
+			function setTextChatCtiQAndGroup() {
+				var personalChatCtiQList = ipronMonitoringData.personalChatCtiQList;
+				var allPersonalCtiQRedisData = personalChatCtiQList.allPersonalChatCtiQRedisData;
+				var personalChatAgentGroupList = ipronMonitoringData.personalChatAgentGroupList;
+				var allPersonalChatAgentGroupRedisData = personalChatAgentGroupList.allPersonalChatAgentGroupRedisData;
+				
+				var strSql = " \
+					SELECT\
+						SUM_CONN_CNT,\
+						SUM_ANSWER_CNT,\
+						ROUND((SUM_ANSWER_CNT/IFNULL(SUM_CONN_CNT,1)) * 100) ANSWER_RATE,\
+						RTS_WAIT_CNT\
+					FROM ( \
+	   					SELECT \
+							SUM(A.SUM_CONN_CNT) SUM_CONN_CNT,\
+							SUM(A.SUM_ANSWER_CNT) SUM_ANSWER_CNT,\
+							SUM(A.RTS_WAIT_CNT) RTS_WAIT_CNT\
+						FROM ? A \
+					) \
+				";
+				
+				var strSql2 = " \
+	   				SELECT \
+						SUM(A.TOT_AGENT_CNT) TOT_AGENT_CNT,\
+						SUM(A.RTS_READY) RTS_READY,\
+						SUM(A.RTS_IB_BUSY + A.RTS_OB_BUSY + RTS_OB_DIALING + RTS_IB_RINGING) RTS_BUSY,\
+						SUM(A.RTS_NOTREADY) RTS_NOTREADY,\
+						SUM(A.RTS_ACW) RTS_ACW\
+					FROM ? A \
+				";
+				
+				var allPersonalAlaSqlResults = alasql(strSql, [allPersonalCtiQRedisData])[0];
+				var allPersonalChatAgentGroupAlaResult = alasql(strSql2,[allPersonalChatAgentGroupRedisData]);
+				
+				console.table(allPersonalAlaSqlResults);
+				console.table(allPersonalChatAgentGroupAlaResult);
+				
+				$('#allPersonalCtiQChatSumConnCnt').text(allPersonalAlaSqlResults.SUM_CONN_CNT);
+				$('#allPersonalCtiQChatSumAnswerCnt').text(allPersonalAlaSqlResults.SUM_ANSWER_CNT);
+				$('#allPersonalCtiQChatSumAnswerRate').text(allPersonalAlaSqlResults.ANSWER_RATE);
+				$('#allPersonalCtiQChatSumRtsWaitCnt').text(allPersonalAlaSqlResults.RTS_WAIT_CNT);
+				
+				
+				$('#personalAgentGroupChatTotAgentCnt').text(allPersonalChatAgentGroupAlaResult[0].TOT_AGENT_CNT);
+				$('#personalAgentGroupChatReady').text(allPersonalChatAgentGroupAlaResult[0].RTS_READY);
+				$('#personalAgentGroupChatBusy').text(allPersonalChatAgentGroupAlaResult[0].RTS_BUSY);
+				$('#personalAgentGroupChatNotReady').text(allPersonalChatAgentGroupAlaResult[0].RTS_NOTREADY);
+				$('#personalAgentGroupChatAcw').text(allPersonalChatAgentGroupAlaResult[0].RTS_ACW);
+			}
+		</script>
+	</head>
+	
+	<body>
+		<!-- <button id="fullscreenBtn">전체 화면</button> -->
+		<div class="top-div" style="display:flex; width:100%; height:15%;">
+			<div id="top-div-title" style="width:80%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 70px; border-radius:10px; ">회원 컨텍센터 현황</div>
+			<div id="top-div-date" style="width:20%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 60px; border-radius:10px;"></div>
+		</div>
+		<div class="bottom-div" style="width:100%; height:85%;">
+			<div class="bottom-div-title">전화상담</div>
+			<div class="bottom-div-content" style="height:55%;display:flex;">
+				<div class="bottom-div-content-left" style="width:45%">
+					<table>
+						<thead>
+							<tr>
+								<td>구분</td>
+								<td>인입호</td>
+								<td>응대호</td>
+								<td>응대율</td>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>전체</td>
+								<td><span id="allPersonalCtiQVoiceSumConnCnt">0</span>건</td>
+								<td><span id="allPersonalCtiQVoiceSumAnswerCnt">0</span>건</td>
+								<td><span id="allPersonalCtiQVoiceSumAnswerRate">0</span>%</td>
+							</tr>
+							<tr style="background-color:#E7E7E7;">
+								<td>개인</td>
+								<td><span id="personalCtiQVoiceSumConnCnt">0</span>건</td>
+								<td><span id="personalCtiQVoiceSumAnswerCnt">0</span>건</td>
+								<td><span id="personalCtiQVoiceSumAnswerRate">0</span>%</td>
+							</tr>
+							<tr>
+								<td>법인</td>
+								<td><span id="companyCtiQVoiceSumConnCnt">0</span>건</td>
+								<td><span id="companyCtiQVoiceSumAnswerCnt">0</span>건</td>
+								<td><span id="companyCtiQVoiceSumAnswerRate">0</span>%</td>
+							</tr>
+							<tr style="background-color:#E7E7E7;">
+								<td>분회</td>
+								<td><span id="moneyCtiQVoiceSumConnCnt">0</span>건</td>
+								<td><span id="moneyCtiQVoiceSumAnswerCnt">0</span>건</td>
+								<td><span id="moneyCtiQVoiceSumAnswerRate">0</span>%</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<div class="bottom-div-content-right" style="width:55%">
+					<table>
+						<thead>
+							<tr>
+								<td>총상담원</td>
+								<td>대기중</td>
+								<td>상담중</td>
+								<td>이석중</td>
+								<td>후처리중</td>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td><span id="personalAgentGroupVoiceTotAgentCnt">0</span>명</td>
+								<td><span id="personalAgentGroupVoiceReady">0</span>명</td>
+								<td><span id="personalAgentGroupVoiceBusy">0</span>명</td>
+								<td><span id="personalAgentGroupVoiceNotReady">0</span>명</td>
+								<td><span id="personalAgentGroupVoiceAcw">0</span>명</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<div class="bottom-div-title">채팅상담</div>
+			<div class="bottom-div-content" style="height:25%;">
+				<table>
+					<thead>
+						<tr>
+							<td>인입호</td>
+							<td>응대호</td>
+							<td>응대율</td>
+							<td>대기회원</td>
+							<td>총상담원</td>
+							<td>대기중</td>
+							<td>상담중</td>
+							<td>이석중</td>
+							<td>후처리중</td>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td><span id="allPersonalCtiQChatSumConnCnt">0</span>건</td>
+							<td><span id="allPersonalCtiQChatSumAnswerCnt">0</span>건</td>
+							<td><span id="allPersonalCtiQChatSumAnswerRate">0</span>%</td>
+							<td><span id="allPersonalCtiQChatSumRtsWaitCnt">0</span>명</td>
+							<td><span id="personalAgentGroupChatTotAgentCnt">0</span>명</td>
+							<td><span id="personalAgentGroupChatReady">0</span>명</td>
+							<td><span id="personalAgentGroupChatBusy">0</span>명</td>
+							<td><span id="personalAgentGroupChatNotReady">0</span>명</td>
+							<td><span id="personalAgentGroupChatAcw">0</span>명</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</body>
+</html>

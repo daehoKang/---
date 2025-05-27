@@ -1,0 +1,236 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ include file="/WEB-INF/jsp/include/registTaglib.jsp"%>
+<jsp:include page="/WEB-INF/jsp/include/registChart.jsp" flush="true" />
+<html>
+	<head>
+		<title><c:out value="${sessionVO.programName}" /></title>
+		<link rel="stylesheet" href="/BT-EMS/dist/css/monitor.css" type="text/css" />
+		<style>
+			body {
+				background-color: #4B4B4B;
+				padding : 0;
+				margin : 0; 
+				overflow: hidden;
+				font-family: fantasy;
+			}
+			div {
+				/*border : 0.1px solid black;*/
+				margin : 1px;
+			}
+			.bottom-div-title {
+				background-color: #0B3041;
+				color: white;
+				width:100%;
+				height:10%;
+				align-content: center; 
+				padding-left: 30px;
+				font-size: 65px;
+			}
+			.bottom-div-content {
+				background-color: white;
+			}
+			.bottom-div-content table {
+				width:100%;
+				height:100%;
+				align-content: center;
+				text-align: center;
+			}
+			.bottom-div-content thead {
+				background-color : black;
+				color : white;
+				font-size : 30px;
+			}
+			.bottom-div-content tbody {
+				font-size : 40px;
+				
+			}
+			.bottom-div-content tbody tr:nth-child(odd) {
+				background-color : #CBCBCB;
+			}
+			.bottom-div-content tbody tr:nth-child(even) {
+				background-color : #E7E7E7;
+			}
+			.bottom-div-content-right tbody{
+				font-size : 60px;
+			}
+		</style>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.min.js"></script>
+		<script type="text/javascript" src="/BT-EMS/scripts/easyui_1.5.4/jquery.easyui.min.sup.js"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/i18n/swat.i18n.ko.js"/>?v=${rand}"></script>
+		
+		<script type="text/javascript" src="/BT-EMS/scripts/alasql.min.js"></script>
+		
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4Custom.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/monitoringV4.js"/>?v=${rand}"></script>
+		<script type="text/javascript" src="<c:url value="/scripts/tools.js"/>?v=${rand}"></script>
+		<script type="text/javaScript" defer="defer">
+			var monitoringInitData;
+			var ipronMonitoringData;
+		
+			$(document).ready(function () {
+				generateAgentTr();
+				
+				updateTime();
+				
+				setInitData();
+				startGetData();
+			});
+			
+			function generateAgentTr() {
+				const tableLeftBody = document.querySelector('#insuranceAgents-left');
+				const tableRightBody = document.querySelector('#insuranceAgents-right');
+				
+				for (let i =1 ; i <= 10; i ++) {
+					const tr = document.createElement('tr');
+					
+					const nameTd = document.createElement("td");
+					nameTd.id = 'insuranceAgentName' + i;
+					tr.appendChild(nameTd);
+					
+					const answerCntTd = document.createElement("td");
+					answerCntTd.id = 'insuranceAgentAnswerCnt' + i;
+					tr.appendChild(answerCntTd);
+					
+					const talkTimeTd = document.createElement("td");
+					talkTimeTd.id = 'insuranceAgentTalkTime' + i;
+					tr.appendChild(talkTimeTd);
+					
+					const acwTimeTd = document.createElement("td");
+					acwTimeTd.id = 'insuranceAgentAcwTime' + i;
+					tr.appendChild(acwTimeTd);
+					
+					tableLeftBody.appendChild(tr);
+				}
+				
+				for (let i =11 ; i <= 20; i ++) {
+					const tr = document.createElement('tr');
+					
+					const nameTd = document.createElement("td");
+					nameTd.id = 'insuranceAgentName' + i;
+					tr.appendChild(nameTd);
+					
+					const answerCntTd = document.createElement("td");
+					answerCntTd.id = 'insuranceAgentAnswerCnt' + i;
+					tr.appendChild(answerCntTd);
+					
+					const talkTimeTd = document.createElement("td");
+					talkTimeTd.id = 'insuranceAgentTalkTime' + i;
+					tr.appendChild(talkTimeTd);
+					
+					const acwTimeTd = document.createElement("td");
+					acwTimeTd.id = 'insuranceAgentAcwTime' + i;
+					tr.appendChild(acwTimeTd);
+					
+					tableRightBody.appendChild(tr);
+				}
+			}
+			
+			function updateTime() {
+				const now = new Date();
+				const formattedTime = String(now.getFullYear()).padStart(2, '0') + '. '
+									+ String(now.getMonth() + 1).padStart(2, '0') + '. '
+									+ String(now.getDate()).padStart(2, '0');
+				
+				$('#top-div-date').text(formattedTime);
+			}
+			
+			function startGetData() {
+				MonitoringSchedulerV3
+				.add("USR40S6032-IPRON", {"callback": setIpronMonitoringData, "interval": 5000})
+				.start()
+				.enableAutoRecovery();
+			}
+			
+			function setIpronMonitoringData ($def) {
+				var sUrl = "<c:url value='/usr/board/USR40S6032/ipronData.do'/>"
+				Swat.process(sUrl, monitoringInitData, { "callback":function(result) {
+					ipronMonitoringData = JSON.parse(result.rows);
+					console.log('ipron monitoring data');
+					console.table(ipronMonitoringData);
+					
+					setTextAgentList();
+					
+					$def.resolve();
+				}});
+			}
+			
+			function setInitData() {
+				var sUrl = "<c:url value='/usr/board/USR40S6032/initData.do'/>"
+				Swat.process(sUrl, null, { "callback":function(result) {
+					monitoringInitData = JSON.parse(result.rows);
+					console.log('monitoring init data');
+					console.table(monitoringInitData);
+				}});
+			}
+			
+			function setTextAgentList () {
+				var insuranceAgentList = ipronMonitoringData.insuranceAgentList;
+				var allInsuranceVoiceAgentRedisData = insuranceAgentList.allInsuranceVoiceAgentRedisData;
+				
+				alasql.fn.formatTime = function(seconds) {
+					const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+					const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+					const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+					return h+':'+m+':'+s;
+				}
+				var strSql = " \
+					SELECT \
+						A.AGENT_NAME,\
+						A.SUM_ANSW_CNT,\
+						formatTime(A.SUM_IB_TALKTIME) SUM_IB_TALKTIME,\
+						formatTime(A.SUM_ACW_TIME) SUM_ACW_TIME\
+					FROM ? A \
+					ORDER BY SUM_ANSW_CNT DESC LIMIT 20 \
+				";
+				
+				var allInsuranceVoiceAgentAlaResult = alasql(strSql,[allInsuranceVoiceAgentRedisData]);
+				console.table(allInsuranceVoiceAgentAlaResult);
+				
+				for(var i= 0;i< 20;i++) {
+					var index = i+1;
+					$('#insuranceAgentName' + index).text(allInsuranceVoiceAgentAlaResult[i] === undefined ? '-' : allInsuranceVoiceAgentAlaResult[i].AGENT_NAME);
+					$('#insuranceAgentAnswerCnt' + index).text(allInsuranceVoiceAgentAlaResult[i] === undefined ? '-' : allInsuranceVoiceAgentAlaResult[i].SUM_ANSW_CNT);
+					$('#insuranceAgentTalkTime' + index).text(allInsuranceVoiceAgentAlaResult[i] === undefined ? '-' : allInsuranceVoiceAgentAlaResult[i].SUM_IB_TALKTIME);
+					$('#insuranceAgentAcwTime' + index).text(allInsuranceVoiceAgentAlaResult[i] === undefined ? '-' : allInsuranceVoiceAgentAlaResult[i].SUM_ACW_TIME);	
+				}
+			}
+		</script>
+	</head>
+	
+	<body>
+		<div class="top-div" style="display:flex; width:100%; height:15%;">
+			<div id="top-div-title" style="width:80%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 70px; border-radius:10px; ">보험 CS 컨택센터 현황</div>
+			<div id="top-div-date" style="width:20%;height:100%; align-content: center; text-align: center; background-color:white; font-size: 60px; border-radius:10px;"></div>
+		</div>
+		<div class="bottom-div" style="width:100%; height:85%; display:flex;">
+			<div class="bottom-div-content" style="width:50%">
+				<table>
+					<thead>
+						<tr>
+							<td>상담원</td>
+							<td>응대(전체)</td>
+							<td>상담시간</td>
+							<td>후처리시간</td>
+						</tr>
+					</thead>
+					<tbody id="insuranceAgents-left">
+					</tbody>
+				</table>
+			</div>
+			<div class="bottom-div-content" style="width:50%">
+				<table>
+					<thead>
+						<tr>
+							<td>상담원</td>
+							<td>응대(전체)</td>
+							<td>상담시간</td>
+							<td>후처리시간</td>
+						</tr>
+					</thead>
+					<tbody id="insuranceAgents-right">
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</body>
+</html>
